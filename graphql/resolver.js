@@ -4,7 +4,7 @@ const validator = require("validator");
 const jwt = require("jsonwebtoken");
 const Post = require("../models/post");
 const { create } = require("../models/user");
-
+const {clearImage}=require("../util/file")
 module.exports = {
   hello() {
     return { text: { statement: "whatsup" }, views: 2 };
@@ -133,5 +133,110 @@ module.exports = {
       totalPosts: totalPosts,
     };
   },
-  
+  post: async function ({ id }, req) {
+    if (!req.isAuth) {
+      const error = new Error(`Not Authenticated`);
+      error.code = 401;
+      throw error;
+    }
+    const post = await Post.findById(id).populate("creator");
+    if (!post) {
+      const error = new Error("No post Found");
+      error.code = 404;
+      throw error;
+    }
+    return {
+      ...post._doc,
+      _id: post._id.toString(),
+      createdAt: post.createdAt.toISOString(),
+      updatedAt: post.updatedAt.toISOString(),
+    };
+  },
+  updatePost: async function ({ id, postInput }, req) {
+    if (!req.isAuth) {
+      const error = new Error(`Not Authenticated`);
+      error.code = 401;
+      throw error;
+    }
+    const post = await Post.findById(id).populate("creator");
+    if (!post) {
+      const error = new Error("No post Found");
+      error.code = 404;
+      throw error;
+    }
+    if (post.creator._id.toString() !== req.userId.toString()) {
+      const error = new Error(`NOt Authorized`);
+      error.code = 403;
+      throw error;
+    }
+
+    post.title = postInput.title;
+    post.content = postInput.content;
+    if (postInput.imageUrl !== "undefined") {
+      post.imageUrl = postInput.imageUrl;
+    }
+    const updatedPost = await post.save();
+    return {
+      ...updatedPost._doc,
+      _id: updatedPost._id,
+      createdAt: updatedPost.createdAt.toISOString(),
+      updatedAt: updatedPost.updatedAt.toISOString(),
+    };
+  },
+  deletePost:async function({id},req){
+    if (!req.isAuth) {
+      const error = new Error(`Not Authenticated`);
+      error.code = 401;
+      throw error;
+    }
+    const post = await Post.findById(id);
+    if(!post){
+      const error= new Error(`Not Authorized`);
+      error.code=404;
+      throw error;
+    }
+    if(post.creator._id.toString()!==req.userId.toString()){
+      const error= new Error(`Not authorized`);
+      error.code=403;
+      throw error;
+    }
+
+   clearImage(post.imageUrl);
+   await Post.findByIdAndRemove(id);
+   const user= await Post.findById(req.userId);
+   user.post.pull(id);
+   await user.save()
+   return true;
+  },
+  user:async function(args,req){
+    if (!req.isAuth) {
+      const error = new Error(`Not Authenticated`);
+      error.code = 401;
+      throw error;
+    }
+    const user= await Post.findById(req.userId);
+    if(!user){
+      const error=new Error(`No user Found`)
+      error.code=404;
+      throw error;
+    }
+    return {...user._doc,_id:user._id.toString()}
+  },
+  updateStatus:async function({status},res){
+    if (!req.isAuth) {
+      const error = new Error(`Not Authenticated`);
+      error.code = 401;
+      throw error;
+    }
+    const user = await User.findById(req.userId);
+    if(!user){
+      const error=new Error(`No user Found`)
+      error.code=404;
+      throw error;
+    }
+    user.status=status;
+    await user.save()
+    return {... user._doc,_id:user._id.toString(),}
+  }
+
 };
